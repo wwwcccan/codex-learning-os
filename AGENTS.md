@@ -36,7 +36,7 @@ Read `docs/architecture.md` and `docs/implementation-plan.md` before changing bo
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
-python3 -m learning_os --help
+PYTHONPATH=src python3 -m learning_os --help
 ```
 
 If development dependencies are installed, also run `python3 -m pytest`.
