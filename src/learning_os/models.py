@@ -17,7 +17,10 @@ class _ParsedEnum(str, Enum):
     def parse(cls, value: str | Enum) -> str:
         if isinstance(value, cls):
             return value.value
-        candidate = str(value).strip()
+        if not isinstance(value, str):
+            allowed = ", ".join(item.value for item in cls)
+            raise ValidationError(f"invalid {cls.__name__} {value!r}; expected one of: {allowed}")
+        candidate = value.strip()
         for item in cls:
             if candidate.lower() in {item.value.lower(), item.name.lower()}:
                 return item.value
@@ -68,7 +71,10 @@ class BlockerType(_ParsedEnum):
             "recent-related-work": cls.RECENT_RELATED_WORK.value,
             "classical-method": cls.CLASSICAL_METHOD.value,
         }
-        candidate = str(value).strip().lower()
+        if not isinstance(value, str):
+            allowed = ", ".join(item.value for item in cls)
+            raise ValidationError(f"invalid {cls.__name__} {value!r}; expected one of: {allowed}")
+        candidate = value.strip().lower()
         if candidate in aliases:
             return aliases[candidate]
         return super().parse(value)
@@ -96,7 +102,12 @@ FOUNDATION_STATUSES = {"suggested", "active", "completed", "archived"}
 
 
 def _record_id(value: Any, label: str = "id") -> str:
-    result = str(value or "").strip()
+    if value is None:
+        result = ""
+    elif isinstance(value, str):
+        result = value.strip()
+    else:
+        raise ValidationError(f"{label} must be a string ID")
     if not result:
         raise ValidationError(f"{label} is required")
     if result in {".", ".."} or "/" in result or "\\" in result:
@@ -107,16 +118,34 @@ def _record_id(value: Any, label: str = "id") -> str:
 
 
 def _string(value: Any, label: str, *, required: bool = False, default: str = "") -> str:
-    result = str(value if value is not None else default).strip()
+    if value is None:
+        value = default
+    if not isinstance(value, str):
+        raise ValidationError(f"{label} must be a string")
+    result = value.strip()
     if required and not result:
         raise ValidationError(f"{label} is required")
     return result
+
+
+def _optional_string(value: Any, label: str) -> str | None:
+    if value is None or value == "":
+        return None
+    return _string(value, label)
+
+
+def _optional_record_id(value: Any, label: str) -> str | None:
+    if value is None or value == "":
+        return None
+    return _record_id(value, label)
 
 
 def _int(value: Any, label: str, *, default: int = 0) -> int:
     if value is None or value == "":
         return default
     if isinstance(value, bool):
+        raise ValidationError(f"{label} must be an integer")
+    if isinstance(value, float) and not value.is_integer():
         raise ValidationError(f"{label} must be an integer")
     try:
         result = int(value)
@@ -152,7 +181,9 @@ def _strings(value: Any, label: str) -> list[str]:
         return [value.strip()] if value.strip() else []
     if not isinstance(value, (list, tuple)):
         raise ValidationError(f"{label} must be a list of strings")
-    result = [str(item).strip() for item in value if str(item).strip()]
+    if not all(isinstance(item, str) for item in value):
+        raise ValidationError(f"{label} must be a list of strings")
+    result = [item.strip() for item in value if item.strip()]
     return result
 
 
@@ -463,6 +494,12 @@ class ConceptRecord:
             raise ValidationError(f"concept status must be one of: {', '.join(sorted(CONCEPT_STATUSES))}")
         if self.a0_successes < 0:
             raise ValidationError("a0_successes cannot be negative")
+        evidence_ids = [item.id for item in self.a0_evidence]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValidationError("concept A0 evidence IDs must be unique")
+        assessment_ids = [item.id for item in self.assessments]
+        if len(assessment_ids) != len(set(assessment_ids)):
+            raise ValidationError("concept assessment IDs must be unique")
         actual_successes = sum(item.is_a0_success for item in self.a0_evidence)
         if self.a0_successes != actual_successes:
             raise ValidationError(
@@ -576,8 +613,8 @@ class BlockerRecord:
         self.description = _string(self.description, "blocker description")
         self.priority = DependencyPriority.parse(self.priority)
         self.status = _string(self.status, "blocker status", default="open").lower()
-        self.concept_id = _string(self.concept_id, "concept id") if self.concept_id else None
-        self.foundation_track = _string(self.foundation_track, "foundation track") if self.foundation_track else None
+        self.concept_id = _optional_record_id(self.concept_id, "concept id")
+        self.foundation_track = _optional_string(self.foundation_track, "foundation track")
         self.created = _timestamp(self.created, "blocker created")
         self.resolved_at = _optional_timestamp(self.resolved_at, "blocker resolved_at")
 
@@ -623,6 +660,8 @@ class BlockerRecord:
             raise ValidationError("blocker status must be open, resolved, or ignored")
         if self.status == "resolved" and not self.resolved_at:
             raise ValidationError("resolved blockers need resolved_at")
+        if self.status != "resolved" and self.resolved_at:
+            raise ValidationError("only resolved blockers may have resolved_at")
 
 
 @dataclass
@@ -794,6 +833,19 @@ class PaperRecord:
         blocker_ids = [item.id for item in self.blockers]
         if len(blocker_ids) != len(set(blocker_ids)):
             raise ValidationError("paper blocker IDs must be unique")
+        for field_name, label in (
+            ("evidence_notes", "paper evidence IDs"),
+            ("formula_map", "paper formula IDs"),
+            ("experiment_predictions", "paper prediction IDs"),
+        ):
+            nested_ids = [item.get("id") for item in getattr(self, field_name) if item.get("id")]
+            if len(nested_ids) != len(set(nested_ids)):
+                raise ValidationError(f"{label} must be unique")
+        open_p0 = any(item.status == "open" and item.priority == "P0" for item in self.blockers)
+        if open_p0 and self.status != "blocked":
+            raise ValidationError("a paper with an open P0 blocker must have status blocked")
+        if self.status == "blocked" and not open_p0:
+            raise ValidationError("a blocked paper must have an open P0 blocker")
 
     def add_blocker(self, blocker: BlockerRecord) -> None:
         if any(item.id == blocker.id for item in self.blockers):
@@ -1014,8 +1066,8 @@ class SessionRecord:
         self.status = _string(self.status, "status", default="active").lower()
         self.title = _string(self.title, "title")
         self.topic = _string(self.topic, "topic")
-        self.concept_id = _string(self.concept_id, "concept_id") if self.concept_id else None
-        self.paper_id = _string(self.paper_id, "paper_id") if self.paper_id else None
+        self.concept_id = _optional_record_id(self.concept_id, "concept_id")
+        self.paper_id = _optional_record_id(self.paper_id, "paper_id")
         for name in ("goal", "initial_belief", "revised_understanding", "reflection", "next_action"):
             setattr(self, name, _string(getattr(self, name), name))
         for name in ("questions", "attempts", "hints", "a0_tests"):
@@ -1100,6 +1152,39 @@ class SessionRecord:
             raise ValidationError("completed sessions need finished_at")
         if self.concept_id and self.paper_id:
             raise ValidationError("a session may link to a concept or a paper, not both")
+        if len(self.mistakes) != len(set(self.mistakes)):
+            raise ValidationError("session mistake IDs must be unique")
+        for index, hint in enumerate(self.hints):
+            if "assistance" in hint:
+                try:
+                    AssistanceLevel.parse(hint["assistance"])
+                except ValidationError as exc:
+                    raise ValidationError(f"session hint {index}: {exc}") from exc
+            if "text" in hint and not isinstance(hint["text"], str):
+                raise ValidationError(f"session hint {index} text must be a string")
+        a0_ids: list[str] = []
+        for index, test in enumerate(self.a0_tests):
+            if "evidence_id" in test:
+                evidence_id = _record_id(test["evidence_id"], f"session a0 test {index} evidence_id")
+                a0_ids.append(evidence_id)
+            if "dimension" in test:
+                try:
+                    Dimension.parse(test["dimension"])
+                except ValidationError as exc:
+                    raise ValidationError(f"session a0 test {index}: {exc}") from exc
+            if "assistance" in test:
+                try:
+                    AssistanceLevel.parse(test["assistance"])
+                except ValidationError as exc:
+                    raise ValidationError(f"session a0 test {index}: {exc}") from exc
+            if "correct" in test and not isinstance(test["correct"], bool):
+                raise ValidationError(f"session a0 test {index} correct must be a boolean")
+            if "confidence" in test:
+                _confidence(test["confidence"], f"session a0 test {index} confidence")
+            if "timestamp" in test:
+                _timestamp(test["timestamp"], f"session a0 test {index} timestamp")
+        if len(a0_ids) != len(set(a0_ids)):
+            raise ValidationError("session A0 evidence IDs must be unique")
 
     def add_attempt(self, text: str, *, source: str = "learner") -> None:
         self.attempts.append({"timestamp": now_iso(), "source": source, "text": str(text).strip()})
@@ -1211,3 +1296,5 @@ class FoundationTrackRecord:
     def validate(self) -> None:
         if self.status not in FOUNDATION_STATUSES:
             raise ValidationError(f"foundation status must be one of: {', '.join(sorted(FOUNDATION_STATUSES))}")
+        if len(self.concepts) != len(set(self.concepts)):
+            raise ValidationError("foundation concept IDs must be unique")

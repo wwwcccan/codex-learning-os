@@ -1,6 +1,6 @@
 # Data model
 
-All records use YAML frontmatter between `---` delimiters and `schema_version: 1`. IDs are stable, filename-safe, and unique within a record directory.
+All records use YAML frontmatter between `---` delimiters and `schema_version: 1`. IDs are stable, filename-safe, and unique within a record directory; the frontmatter `id` must equal the Markdown filename stem. Explicit links are resolved by `learning-os validate`.
 
 ## Concept
 
@@ -26,6 +26,8 @@ assessments: []
 ```
 
 `a0_successes` is always recomputed from `a0_evidence` entries where `correct: true` and `assistance: A0`. The five scores are the current projection; `assessments` is the auditable sequence that produced it. `weakness` is an actionable/prioritized subset chosen by the learner or recomputed by deterministic updates from low scores and latest failed A0 dimensions; it need not list every low dimension. `assistance_required` is the lowest assistance level observed on a correct evidence event, defaulting to A5 when there is no successful evidence.
+
+Evidence and assessment IDs are unique within a Concept. Blocker, formula, evidence-note, and prediction IDs are unique within a Paper; Session mistake and A0 evidence IDs are unique within a Session. Duplicate or malformed nested entries fail validation rather than being silently merged.
 
 ## Paper
 
@@ -64,7 +66,7 @@ Retest Question
 
 ## Session
 
-`mode` is `learning` or `research`; a session can link to one Concept or one Paper, never both. `attempts`, `hints`, and `a0_tests` are append-only process records. `finished_at` is required when `status: completed`.
+`mode` is `learning` or `research`; a session can link to one Concept or one Paper, never both. `attempts`, `hints`, and `a0_tests` are append-only process records. `finished_at` is required when `status: completed`. `paper blocker link PAPER_ID BLOCKER_ID --concept CONCEPT_ID` supports the explicit workflow where a blocker is recorded before its repair Concept exists.
 
 ## Evidence labels
 

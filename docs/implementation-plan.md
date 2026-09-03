@@ -35,6 +35,7 @@ The only extra beyond the minimum list is small structured support for paper evi
 | Repeated probability gap | Three distinct papers produce a repeated blocker/foundation candidate; no fake mastery or fabricated historical sessions are created. |
 | Mastery safety | Assisted correctness does not increment `a0_successes`; only three dated A0 successes plus one novel transfer success and score thresholds can produce `mastered`. |
 | Daily use | `dashboard` reports due reviews, weak concepts, unresolved mistakes, repeated blockers, assistance/A0 metrics, and foundation candidates. |
+| Vault integrity | `validate` rejects malformed/truncated frontmatter, missing/type-invalid fields, duplicate IDs, filename/ID drift, broken explicit links, partial-write artifacts, and inconsistent mastery counters. |
 
 ## Exit checks
 
@@ -46,3 +47,5 @@ PYTHONPATH=src python3 -m learning_os validate --json
 ```
 
 The repository is ready for real use when those checks pass and one fresh vault has completed each acceptance scenario. Real learner records are never fabricated to make the dashboard look healthy.
+
+The current MVP also treats integrity failures as fail-closed diagnostics: validation does not silently normalize or delete a user-authored file. Known explicit links are checked at service boundaries, while `validate` remains the final cross-record audit after manual Markdown edits.

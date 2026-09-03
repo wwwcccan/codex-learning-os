@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from learning_os.errors import ValidationError
+from learning_os.errors import RecordNotFoundError, ValidationError
 from learning_os.frontmatter import dump_markdown, load_markdown
 from learning_os.models import ConceptRecord
 from learning_os.policies import FixedIntervalScheduler, foundation_candidates, repeated_blockers
@@ -46,6 +46,335 @@ class CoreModelTests(unittest.TestCase):
         self.assertEqual(data["blockers"][0]["label"], "EFIM")
         self.assertIn("Core Problem", body)
 
+    def test_validate_fails_closed_for_malformed_missing_typed_and_partial_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            concepts = Path(temp) / "Concepts"
+            (concepts / "missing-name.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "missing-name",
+                        "domain": "math",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (concepts / "bad-yaml.md").write_text(
+                "---\n"
+                "schema_version: 1\n"
+                "type: concept\n"
+                "id: bad-yaml\n"
+                "name: Bad\n"
+                "domain: math\n"
+                "  recall: 1\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            (concepts / "wrong-type.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "wrong-type",
+                        "name": ["not", "a", "string"],
+                        "domain": "math",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (concepts / "truncated.md").write_text(
+                "---\nschema_version: 1\ntype: concept\nid: truncated\n",
+                encoding="utf-8",
+            )
+            (concepts / ".concept.md.tmp").write_text("---\nid: partial\n", encoding="utf-8")
+
+            errors = repo.validate_all()
+            joined = "\n".join(errors)
+            self.assertIn("missing-name", joined)
+            self.assertIn("invalid YAML", joined)
+            self.assertIn("wrong-type", joined)
+            self.assertIn("no closing frontmatter delimiter", joined)
+            self.assertIn("partial/temporary record file", joined)
+
+    def test_validate_checks_explicit_links_and_filename_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            root = Path(temp)
+            (root / "Concepts" / "broken-prereq.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "broken-prereq",
+                        "name": "Broken prerequisite",
+                        "domain": "math",
+                        "prerequisites": ["missing-concept"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Papers" / "broken-paper.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "paper",
+                        "id": "broken-paper",
+                        "title": "Broken paper",
+                        "status": "blocked",
+                        "blockers": [
+                            {
+                                "id": "missing-concept-blocker",
+                                "type": "prerequisite_concept",
+                                "label": "Missing concept",
+                                "priority": "P0",
+                                "status": "open",
+                                "concept_id": "missing-concept",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Sessions" / "broken-session.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "session",
+                        "id": "broken-session",
+                        "mode": "learning",
+                        "concept_id": "missing-concept",
+                        "mistakes": ["missing-mistake"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Mistakes" / "broken-mistake.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "mistake",
+                        "id": "broken-mistake",
+                        "concept_id": "missing-concept",
+                        "error_type": "missing link",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Foundation" / "broken-track.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "foundation_track",
+                        "id": "broken-track",
+                        "name": "Broken track",
+                        "concepts": ["missing-concept"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Concepts" / "wrong-filename.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "actual-id",
+                        "name": "Filename mismatch",
+                        "domain": "math",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            errors = repo.validate_all()
+            joined = "\n".join(errors)
+            self.assertGreaterEqual(joined.count("broken link"), 5)
+            self.assertIn("prerequisites", joined)
+            self.assertIn("blocker.concept_id", joined)
+            self.assertIn("mistakes", joined)
+            self.assertIn("concept_id", joined)
+            self.assertIn("concepts", joined)
+            self.assertIn("frontmatter id 'actual-id'", joined)
+
+    def test_validate_rejects_duplicate_frontmatter_and_nested_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            create_concept(repo, concept_id="same", name="Same", domain="math")
+            root = Path(temp)
+            (root / "Concepts" / "copy.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "same",
+                        "name": "Copy",
+                        "domain": "math",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            duplicate_evidence = {
+                "id": "evidence-1",
+                "dimension": "recall",
+                "correct": False,
+                "assistance": "A0",
+                "confidence": 50,
+                "novel_problem": False,
+                "timestamp": "2026-09-01T09:00:00+08:00",
+            }
+            (root / "Concepts" / "nested.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "nested",
+                        "name": "Nested duplicate",
+                        "domain": "math",
+                        "a0_evidence": [duplicate_evidence, duplicate_evidence],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "Papers" / "nested-paper.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "paper",
+                        "id": "nested-paper",
+                        "title": "Nested duplicate paper",
+                        "status": "blocked",
+                        "blockers": [
+                            {
+                                "id": "same-blocker",
+                                "type": "notation",
+                                "label": "notation",
+                                "priority": "P0",
+                                "status": "open",
+                            },
+                            {
+                                "id": "same-blocker",
+                                "type": "notation",
+                                "label": "notation again",
+                                "priority": "P0",
+                                "status": "open",
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            errors = repo.validate_all()
+            joined = "\n".join(errors)
+            self.assertIn("duplicate concept ID 'same'", joined)
+            self.assertIn("concept A0 evidence IDs must be unique", joined)
+            self.assertIn("paper blocker IDs must be unique", joined)
+
+    def test_validate_rejects_inconsistent_mastery_and_assistance_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            root = Path(temp) / "Concepts"
+            root.joinpath("manual-mastered.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "manual-mastered",
+                        "name": "Manual mastered",
+                        "domain": "math",
+                        "status": "mastered",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            root.joinpath("assisted-count.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "assisted-count",
+                        "name": "Assisted count",
+                        "domain": "math",
+                        "assistance_required": "A9",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            root.joinpath("counter-mismatch.md").write_text(
+                dump_markdown(
+                    {
+                        "schema_version": 1,
+                        "type": "concept",
+                        "id": "counter-mismatch",
+                        "name": "Counter mismatch",
+                        "domain": "math",
+                        "a0_successes": 1,
+                        "a0_evidence": [
+                            {
+                                "id": "assisted-evidence",
+                                "dimension": "recall",
+                                "correct": True,
+                                "assistance": "A2",
+                                "confidence": 80,
+                                "novel_problem": False,
+                                "timestamp": "2026-09-01T09:00:00+08:00",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            errors = repo.validate_all()
+            joined = "\n".join(errors)
+            self.assertIn("A0 mastery gate", joined)
+            self.assertIn("invalid AssistanceLevel", joined)
+            self.assertIn("does not match recorded A0 successes", joined)
+
+    def test_repeated_blockers_count_distinct_papers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            create_concept(repo, concept_id="fisher", name="Fisher Information", domain="probability")
+            create_paper(repo, paper_id="paper-1", title="Paper 1")
+            create_paper(repo, paper_id="paper-2", title="Paper 2")
+            add_blocker(
+                repo,
+                "paper-1",
+                blocker_type="prerequisite",
+                label="Fisher Information",
+                priority="P0",
+                concept_id="fisher",
+                blocker_id="fisher-1",
+            )
+            add_blocker(
+                repo,
+                "paper-1",
+                blocker_type="prerequisite",
+                label="Fisher Information duplicate note",
+                priority="P0",
+                concept_id="fisher",
+                blocker_id="fisher-1b",
+            )
+            self.assertEqual(repeated_blockers(repo, threshold=2), [])
+            add_blocker(
+                repo,
+                "paper-2",
+                blocker_type="prerequisite",
+                label="Fisher Information",
+                priority="P0",
+                concept_id="fisher",
+                blocker_id="fisher-2",
+            )
+            repeated = repeated_blockers(repo, threshold=2)
+            self.assertEqual(len(repeated), 1)
+            self.assertEqual(repeated[0]["count"], 2)
+
     def test_invalid_score_and_assistance_are_rejected(self) -> None:
         with self.assertRaises(ValidationError):
             ConceptRecord.from_dict(
@@ -58,6 +387,20 @@ class CoreModelTests(unittest.TestCase):
                     "recall": 6,
                 }
             )
+
+    def test_concept_creation_rejects_unknown_prerequisite(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = VaultRepository(temp)
+            repo.ensure_layout()
+            with self.assertRaises(RecordNotFoundError) as context:
+                create_concept(
+                    repo,
+                    concept_id="strong-convexity",
+                    name="Strong Convexity",
+                    domain="convex-optimization",
+                    prerequisites=["missing-concept"],
+                )
+            self.assertIn("concept not found", str(context.exception))
         with self.assertRaises(ValidationError):
             ConceptRecord.from_dict(
                 {

@@ -25,6 +25,7 @@ from .services import (
     add_prediction,
     observe_prediction,
     finish_session,
+    link_blocker_concept,
     record_a0,
     record_assessment,
     resolve_blocker,
@@ -96,6 +97,10 @@ def build_parser() -> argparse.ArgumentParser:
     blocker_resolve = blocker_actions.add_parser("resolve")
     blocker_resolve.add_argument("paper_id")
     blocker_resolve.add_argument("blocker_id")
+    blocker_link = blocker_actions.add_parser("link", help="link an existing blocker to a Concept")
+    blocker_link.add_argument("paper_id")
+    blocker_link.add_argument("blocker_id")
+    blocker_link.add_argument("--concept", required=True)
     dependency = paper_actions.add_parser("dependency", help="add a dependency to a priority bucket")
     dependency.add_argument("paper_id")
     dependency.add_argument("--priority", choices=PRIORITIES, required=True)
@@ -396,6 +401,10 @@ def _paper(repo: VaultRepository, args: argparse.Namespace) -> int:
         if args.blocker_action == "resolve":
             resolve_blocker(repo, args.paper_id, args.blocker_id)
             print(f"resolved blocker {args.blocker_id} on {args.paper_id}")
+            return 0
+        if args.blocker_action == "link":
+            link_blocker_concept(repo, args.paper_id, args.blocker_id, args.concept)
+            print(f"linked concept {args.concept} to blocker {args.blocker_id} on {args.paper_id}")
             return 0
     if args.action == "dependency":
         add_dependency(repo, args.paper_id, priority=args.priority, dependency=args.dependency)

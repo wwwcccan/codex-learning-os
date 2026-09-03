@@ -38,6 +38,8 @@ def create_concept(
     prerequisites: list[str] | None = None,
     body: str | None = None,
 ) -> ConceptRecord:
+    for prerequisite in prerequisites or []:
+        repo.load("concept", prerequisite)
     record = ConceptRecord.new(concept_id, name, domain, prerequisites)
     repo.create("concept", record, body=body)
     return record
@@ -85,6 +87,8 @@ def record_a0(
         session, session_body, _ = repo.load_document("session", session_id)
         if session.concept_id not in {None, concept_id}:
             raise ValidationError(f"session {session_id} is linked to {session.concept_id}, not {concept_id}")
+        if session.paper_id and not session.concept_id:
+            raise ValidationError(f"session {session_id} is linked to paper {session.paper_id}, not a concept")
         linked_session = (session, session_body)
     concept, concept_body, _ = repo.load_document("concept", concept_id)
     evidence = A0Evidence(
@@ -97,6 +101,14 @@ def record_a0(
         session_id=session_id,
         note=note,
     )
+    if linked_session:
+        session, _ = linked_session
+        if session.concept_id is None:
+            session.concept_id = concept_id
+            session.updated = now_iso()
+        # Validate the session before writing the concept so a duplicate or
+        # malformed session event cannot leave the two records out of sync.
+        session.add_a0_test(evidence)
     apply_a0_evidence(concept, evidence, scheduler=FixedIntervalScheduler())
     if score is not None:
         # An explicit score is a learner/mentor assessment. The evidence
@@ -105,7 +117,6 @@ def record_a0(
     repo.save("concept", concept, body=concept_body)
     if linked_session:
         session, session_body = linked_session
-        session.add_a0_test(evidence)
         repo.save("session", session, body=session_body)
     return concept, evidence
 
@@ -182,6 +193,34 @@ def add_blocker(
     paper.add_blocker(blocker)
     repo.save("paper", paper, body=body)
     return paper, blocker
+
+
+def link_blocker_concept(
+    repo: VaultRepository,
+    paper_id: str,
+    blocker_id: str,
+    concept_id: str,
+) -> PaperRecord:
+    """Attach an existing Concept to a previously recorded blocker."""
+
+    concept = repo.load("concept", concept_id)
+    paper, body, _ = repo.load_document("paper", paper_id)
+    for blocker in paper.blockers:
+        if blocker.id != blocker_id:
+            continue
+        if blocker.concept_id and blocker.concept_id != concept.id:
+            raise ValidationError(
+                f"blocker {blocker_id} is already linked to concept {blocker.concept_id}"
+            )
+        blocker.concept_id = concept.id
+        dependencies = getattr(paper, f"{blocker.priority.lower()}_dependencies")
+        if concept.id not in dependencies:
+            dependencies.append(concept.id)
+        paper.updated = now_iso()
+        paper.validate()
+        repo.save("paper", paper, body=body)
+        return paper
+    raise ValidationError(f"blocker not found in paper {paper_id}: {blocker_id}")
 
 
 def resolve_blocker(repo: VaultRepository, paper_id: str, blocker_id: str) -> PaperRecord:
@@ -332,6 +371,7 @@ def observe_prediction(
 
 def dependency_map(repo: VaultRepository, paper_id: str) -> dict[str, Any]:
     paper = repo.load("paper", paper_id)
+    open_p0 = any(blocker.status == "open" and blocker.priority == "P0" for blocker in paper.blockers)
     return {
         "paper_id": paper.id,
         "title": paper.title,
@@ -352,8 +392,8 @@ def dependency_map(repo: VaultRepository, paper_id: str) -> dict[str, Any]:
             }
             for blocker in paper.blockers
         ],
-        "next_action": "repair P0 dependencies before returning to the paper"
-        if paper.p0_dependencies
+        "next_action": "repair open P0 blockers before returning to the paper"
+        if open_p0
         else "return to the paper and run an A0 explanation check",
     }
 
@@ -448,8 +488,12 @@ def add_session_a0(repo: VaultRepository, session_id: str, evidence: A0Evidence,
 
 
 def add_session_mistake(repo: VaultRepository, session_id: str, mistake_id: str) -> SessionRecord:
-    repo.load("mistake", mistake_id)
+    mistake = repo.load("mistake", mistake_id)
     record, body, _ = repo.load_document("session", session_id)
+    if record.concept_id and mistake.concept_id != record.concept_id:
+        raise ValidationError(
+            f"mistake {mistake_id} is linked to {mistake.concept_id}, not session concept {record.concept_id}"
+        )
     if mistake_id not in record.mistakes:
         record.mistakes.append(mistake_id)
     record.updated = now_iso()

@@ -20,7 +20,7 @@ Use `notation`, `prerequisite_concept`, `derivation`, `classical_method`, `bench
 - `P2`: know what it is and why it appears;
 - `P3`: defer safely for now.
 
-Record the linked Concept when a repair can be tested. `learning-os paper map PAPER_ID` returns the current dependency map and next action.
+Record the linked Concept when a repair can be tested. If the Concept is created after the blocker, use `learning-os paper blocker link PAPER_ID BLOCKER_ID --concept CONCEPT_ID`. `learning-os paper map PAPER_ID` returns the current dependency map and next action.
 
 ## Evidence discipline
 

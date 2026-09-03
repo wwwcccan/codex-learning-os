@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
+from .errors import ValidationError
 from .models import (
     ASSISTANCE_LEVELS,
     CONCEPT_DIMENSIONS,
@@ -88,6 +89,8 @@ def repeated_blockers(repo: Any, *, threshold: int = FOUNDATION_BLOCKER_THRESHOL
     one paper from pretending to be cross-paper structural evidence.
     """
 
+    if threshold < 1:
+        raise ValidationError("blocker threshold must be at least 1")
     grouped: dict[str, dict[str, Any]] = {}
     for paper in repo.records("paper"):
         seen_in_paper: set[str] = set()
@@ -125,15 +128,21 @@ def repeated_blockers(repo: Any, *, threshold: int = FOUNDATION_BLOCKER_THRESHOL
 def foundation_candidates(repo: Any, *, threshold: int = FOUNDATION_BLOCKER_THRESHOLD) -> list[dict[str, Any]]:
     """Find cross-concept or cross-paper patterns that justify a foundation track."""
 
+    if threshold < 1:
+        raise ValidationError("foundation threshold must be at least 1")
     concept_by_id = {concept.id: concept for concept in repo.records("concept")}
     grouped: dict[str, dict[str, Any]] = {}
     for paper in repo.records("paper"):
+        seen_in_paper: set[str] = set()
         for blocker in paper.blockers:
             concept = concept_by_id.get(blocker.concept_id or "")
             track = blocker.foundation_track or (concept.domain if concept else "")
             if not track:
                 continue
             key = _normal_key(track)
+            if key in seen_in_paper:
+                continue
+            seen_in_paper.add(key)
             item = grouped.setdefault(
                 key,
                 {

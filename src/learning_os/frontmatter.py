@@ -73,7 +73,10 @@ def load_yaml(text: str) -> Any:
             return {} if value is None else value
         except Exception as exc:
             raise ValidationError(f"invalid YAML frontmatter: {exc}") from exc
-    return _MiniYamlParser(text).parse()
+    try:
+        return _MiniYamlParser(text).parse()
+    except ValidationError as exc:
+        raise ValidationError(f"invalid YAML frontmatter: {exc}") from exc
 
 
 def dump_yaml(data: dict[str, Any]) -> str:

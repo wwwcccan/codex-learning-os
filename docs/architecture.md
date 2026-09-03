@@ -38,7 +38,7 @@ Session `a0_tests` contains a compact context snapshot and the evidence ID. The 
 
 The Python core owns:
 
-- YAML parsing, schema validation, file paths, duplicate IDs, timestamps, and link checks;
+- YAML parsing, schema validation, file paths, duplicate IDs, timestamps, and explicit cross-record link checks;
 - counter updates (`a0_successes`), review dates, score bounds, and status transitions;
 - blocker aggregation, repeated-gap detection, foundation candidates, and dashboard statistics;
 - the scheduler interface and the transparent fixed-interval fallback.
@@ -76,7 +76,7 @@ Session: active -> completed | abandoned
 ```text
 learning-os init
 learning-os concept {create,show,update,validate,list}
-learning-os paper {create,show,list,blocker,dependency,map,evidence,formula,prediction}
+learning-os paper {create,show,list,blocker(add,link,resolve),dependency,map,evidence,formula,prediction}
 learning-os mistake {create,show,resolve,list,link}
 learning-os session {start,show,list,attempt,hint,a0,finish}
 learning-os a0 record
@@ -88,6 +88,18 @@ learning-os validate
 ```
 
 All commands accept `--vault PATH` either before or after the command. `--json` is available on read/report commands for scripts.
+
+## Integrity and failure behavior
+
+`learning-os validate` is the vault integrity boundary. It scans every record file, parses the versioned frontmatter, validates nested event IDs and types, and then resolves explicit links:
+
+- Concept prerequisites and A0 evidence `session_id`;
+- Paper blocker `concept_id`;
+- Mistake `concept_id`;
+- Session `concept_id`, `paper_id`, mistake IDs, and linked A0 evidence IDs;
+- Foundation-track concept IDs.
+
+It also detects a frontmatter ID that does not match its filename, duplicate IDs within a record directory, inconsistent mastery/A0 counters, malformed or truncated Markdown, and leftover `.tmp`, `.partial`, or `.part` files from an interrupted write. Validation reports every discovered error and returns non-zero; it does not delete, rewrite, or guess a repair. Service operations validate known link targets before creating a new explicit link. When a blocker is recorded before its prerequisite Concept exists, `paper blocker link` provides the explicit second step after the Concept is created.
 
 ## Milestones
 

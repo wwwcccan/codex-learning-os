@@ -16,6 +16,12 @@ learning-os init
 创建一个概念并开始学习：
 
 ```bash
+learning-os concept create convex-functions \
+  --name "Convex Functions" \
+  --domain convex-optimization
+learning-os concept create gradient \
+  --name "Gradient" \
+  --domain calculus
 learning-os concept create strong-convexity \
   --name "Strong Convexity" \
   --domain convex-optimization \
@@ -40,6 +46,14 @@ learning-os session finish 2026-09-03-strong-convexity \
 learning-os dashboard
 ```
 
+显式链接（例如 `prerequisites`、blocker 的 `concept_id`、Session 的概念/论文和 Mistake 链接）必须指向已经存在的记录；创建时会尽早拒绝未知目标。手工编辑 Markdown 后建议运行：
+
+```bash
+learning-os validate --json
+```
+
+验证会 fail closed：malformed YAML、缺少必填字段、错误类型或 assistance level、文件名与 frontmatter ID 不一致、重复 ID、断链、残留 `.tmp/.partial/.part` 文件、以及不一致的 mastery/A0 counter 都会使命令返回非零结果，并保留原文件供修复。
+
 查看所有命令：
 
 ```bash
@@ -59,10 +73,11 @@ editable 安装只用于把 `learning-os` 放进环境；核心运行时没有�
 ## MVP 覆盖范围
 
 - Learning Mode：Concept、五维能力、Feynman 会话记录、A0 evidence、延迟 review。
-- Research Mode：Paper、blocker diagnosis、P0–P3 dependency map、证据标签和 prerequisite repair 线索。
+- Research Mode：Paper、blocker diagnosis、P0–P3 dependency map、证据标签和 prerequisite repair 线索；可用 `paper blocker link` 把后创建的 Concept 回链到既有 blocker。
 - Mistakes：保存认知 bug，而不只是正确答案。
 - Dashboard：due reviews、weak concepts、unresolved mistakes、repeated blockers、AI dependency、A0 success rate、foundation-track candidates。
 - 可替换 scheduler 接口；MVP 使用透明的固定间隔 fallback，不自研 FSRS。
+- Integrity validation：单文件 schema + 跨文件 explicit links + 原子 Markdown 写入；校验失败不会静默修复或删除用户记录。
 
 ## 设计边界
 
