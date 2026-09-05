@@ -1,26 +1,39 @@
 ---
-schema_version: 1
-type: mistake
-id: mistake-id
-concept_id: concept-id
-error_type: misconception
-severity: medium
-status: unresolved
-assistance: A5
-confidence: 50
-created: "2026-09-03T00:00:00+08:00"
-retest: null
-updated: "2026-09-03T00:00:00+08:00"
+first_seen: YYYY-MM-DD
+last_seen: YYYY-MM-DD
+reoccurrences: 1
+concepts: []
 ---
 
-## Problem
+# Mistake Pattern
 
-## My Answer
+## 错误模式
 
-## What Was Wrong
+我稳定地容易犯什么错误？只记录可复用的模式，不记录每次小计算或 notation slip。
 
-## Why I Made This Mistake
+## 正确模型
 
-## Correct Mental Model
+Tutor 的正确 mental model；与学习者原始回答分开。
 
-## Retest Question
+## 为什么我容易犯这个错误
+
+触发条件、混淆来源或隐藏假设。
+
+## 最近一次出现
+
+保留问题和学习者的原始回答；同一模式复发时追加，不覆盖旧回答。
+
+## 证据来源
+
+Session 片段的相对链接，注明“证据 1”等；没有可追溯片段时写“待补证据”。
+
+- [YYYY-MM-DD Session](../Sessions/YYYY-MM-DD-thread-slug.md)，证据 1
+
+## 最近复测
+
+日期、题目或链接、实际帮助、结果；没有复测时写“未复测”。
+
+## 下次怎么测试
+
+写一个能检验该稳定错误是否修复的新题或变式。重复整理同一次事件不增加
+`reoccurrences`；新事件才增加一次。

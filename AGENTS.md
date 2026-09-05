@@ -1,42 +1,25 @@
-# Codex Learning OS
+# codex-learning-os
 
-## Goal
+这是只供本人使用的 Markdown-first 学习与科研辅助系统。目标是提高未来的独立
+学习能力，不是让当前的 AI 辅助答案看起来完整。
 
-Maximize the learner's future unassisted performance, not current assisted performance.
-This is a personal, Markdown-first learning and research training system.
+开始任何任务前：
 
-## Non-negotiable rules
+1. 先读 `SPEC.md`；
+2. 按需读取相关 `Concepts/`、`Papers/`、`Mistakes/` 和同 `thread` 的最近
+   `Sessions/`；
+3. Tutor 行为遵循 `.agents/skills/ai-tutor/SKILL.md`；
+4. 使用 `Templates/` 的固定格式，保留学习者自己的原始思考。
 
-- Assisted performance is not mastery; recognition is not mastery.
-- A0 evidence and active output are the main basis for mastery.
-- Keep FACT, INFERENCE, HYPOTHESIS, SPECULATION, and UNKNOWN separate.
-- Keep AI assistance high for low-value friction and progressively lower it for derivations, critique, evidence judgment, and research decisions.
-- Deterministic code owns validation, dates, counters, status transitions, dashboards, and file updates. LLM behavior belongs in the local tutor Skill.
-- Markdown frontmatter is the single persisted source of truth. Do not add a parallel JSON/database mastery store.
+关键约束：
 
-## Repository map
+- Markdown + YAML frontmatter 是状态来源；不主动加入复杂基础设施。
+- assistance 不等于 mastery；核心学习在 A5 后邀请 learner reconstruction，浏览、明确暂停或只想听解释时不强制。
+- 从自然语言推断 browse、learn、assess；正式 assess 先出题再收 confidence，缺少输出不推定不会。
+- 重要 Mistake 先复用已有模式；不为小计算错误建档。
+- `Sessions/` 用 `thread` 区分并行任务；resume 有歧义时只简短询问，不猜。
+- 暂停可先保存真实检查点，不要求先 reflection；跨文件更新先保存 Session，再更新引用方。
+- 固定使用 lowercase-kebab-case 和约定的文件路径。
+- 私人学习与科研内容默认按 private repository 处理；不要自动 push。
 
-- `Concepts/`, `Papers/`, `Mistakes/`, `Sessions/`, `Foundation/`, `Sources/`: Markdown vault data.
-- `Templates/`: human-readable record templates.
-- `src/learning_os/`: deterministic domain model, persistence, policies, and CLI.
-- `docs/`: architecture, pedagogy, schema, rubrics, and workflow contracts.
-- `.agents/skills/ai-tutor/SKILL.md`: state-aware tutor workflow for Codex.
-- `tests/`: policy and end-to-end CLI tests.
-
-Read `docs/architecture.md` and `docs/implementation-plan.md` before changing boundaries, and `docs/mastery-rubric.md` before changing mastery rules.
-
-## Development rules
-
-- Prefer the standard library in the core runtime; optional PyYAML, Pydantic, Typer, and pytest are not required for the CLI to start.
-- Preserve existing user-authored Markdown bodies and unknown frontmatter fields when practical.
-- Make state changes explicit, deterministic, and testable.
-- Use IDs as stable filenames. Never create a second file for the same record type and ID.
-
-## Test commands
-
-```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-PYTHONPATH=src python3 -m learning_os --help
-```
-
-If development dependencies are installed, also run `python3 -m pytest`.
+完整长期规则见 `SPEC.md`；不要把 SPEC 复制到本文件，也不要重新设计整个系统。
