@@ -5,7 +5,7 @@
 
 开始任何任务前：
 
-1. 先读 `SPEC.md`；
+1. 先读 `SPEC.md`；每个新对话在处理任务前按其中的同步规则拉取当前分支的远程最新版本，更新后重读有变化的规则文件；
 2. 按需读取相关 `Concepts/`、`Papers/`、`Mistakes/` 和同 `thread` 的最近
    `Sessions/`；
 3. Tutor 行为遵循 `.agents/skills/ai-tutor/SKILL.md`；
