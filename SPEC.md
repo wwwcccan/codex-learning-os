@@ -262,8 +262,12 @@ Session 状态 `active`、`paused`、`completed` 只表示活动状态，不表�
 
 需要回退时，只撤销本轮实际新增或修改的片段，使用执行前备份或逐文件补丁，不能回退到
 仓库旧版本覆盖用户基线。私人学习和科研内容默认按 private repository 处理；remote
-明确为 public 时，在首次 push `Sessions/`、`Mistakes/` 或真实 Paper 笔记前提醒，不自动
-push。
+明确为 public 时，在首次 push `Sessions/`、`Mistakes/` 或真实 Paper 笔记前提醒。
+
+用户已于 2026-09-06 授权：本仓库每次完成一组修改并通过相应检查后，自动 commit 并
+push 到已配置的 GitHub remote，无需重复确认。只提交本次任务相关改动，保留其他未提交
+工作；不强制推送。用户当次要求暂不提交或推送时，以当次要求为准。推送失败时保留本地
+成果并如实报告，不能宣称已同步。此授权优先于既有技能中“不自动 push”的默认约束。
 
 第一版不主动加入 Web UI、React、手机 App、数据库、向量库、embeddings、RAG、复杂知识
 图谱、云同步、多用户、认证、自动下载论文、互联网抓取、复杂 scheduler、多 Agent、大量

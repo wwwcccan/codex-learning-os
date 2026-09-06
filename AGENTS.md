@@ -20,6 +20,6 @@
 - `Sessions/` 用 `thread` 区分并行任务；resume 有歧义时只简短询问，不猜。
 - 暂停可先保存真实检查点，不要求先 reflection；跨文件更新先保存 Session，再更新引用方。
 - 固定使用 lowercase-kebab-case 和约定的文件路径。
-- 私人学习与科研内容默认按 private repository 处理；不要自动 push。
+- 私人学习与科研内容默认按 private repository 处理；用户已于 2026-09-06 授权每次完成修改并检查后自动 commit、push 到本仓库 GitHub remote，具体规则见 `SPEC.md`。
 
 完整长期规则见 `SPEC.md`；不要把 SPEC 复制到本文件，也不要重新设计整个系统。
